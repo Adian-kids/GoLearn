@@ -587,5 +587,255 @@ city_part_1 修改后 :  [北京 周杰伦 广州]
 
 ## 函数
 
-Go的函数可以返回多个返回值
+Go的函数可以返回多个返回值，同时还可以指定返回参数的名字直接return
+
+```go
+func test(a int, b int) (sum int, str string) {
+	// 直接把返回变量的变量名指定
+	sum = a + b
+	str = "hello"
+	return
+}
+
+func test1(a int, b int) (int, string) {
+	// 多返回值
+	return a + b, "hello"
+}
+
+func test2(a int, b int) int {
+	// 单返回值
+	return a
+}
+func test3(a, b int) int {
+	// 省略变量类型
+	return a
+}
+```
+
+## 内存逃逸
+**什么叫内存逃逸**
+	首先go的变量要不在栈上要不在堆上，栈上的变量会在函数销毁的时候就释放了，堆上的就要靠gc算法来了，我们一般说从栈逃逸到堆上或者一开始直接就在堆上的变量内存叫做内存逃逸
+
+以下为一个实例代码
+
+```go
+package main
+
+import "fmt"
+
+func testPtr() *string {
+	// 返回一个String类型的指针
+	city := "北京"
+	cityPtr := &city
+	return cityPtr
+}
+
+func main() {
+	p1 := testPtr()
+	fmt.Println("p1 :", *p1)
+}
+```
+
+我们将其build出来，并使用--gcflags来查看垃圾回收机制的细节
+
+```go
+go build -o test --gcflags "-m -m -l" 11-memory_escape.go 
+```
+
+结果如下
+
+```
+# command-line-arguments
+./11-memory_escape.go:7:2: city escapes to heap:
+./11-memory_escape.go:7:2:   flow: cityPtr = &city:
+./11-memory_escape.go:7:2:     from &city (address-of) at ./11-memory_escape.go:8:13
+./11-memory_escape.go:7:2:     from cityPtr := &city (assign) at ./11-memory_escape.go:8:10
+./11-memory_escape.go:7:2:   flow: ~r0 = cityPtr:
+./11-memory_escape.go:7:2:     from return cityPtr (return) at ./11-memory_escape.go:9:2
+./11-memory_escape.go:7:2: moved to heap: city
+./11-memory_escape.go:14:22: *p1 escapes to heap:
+./11-memory_escape.go:14:22:   flow: {storage for ... argument} = &{storage for *p1}:
+./11-memory_escape.go:14:22:     from *p1 (spill) at ./11-memory_escape.go:14:22
+./11-memory_escape.go:14:22:     from ... argument (slice-literal-element) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:22:   flow: {heap} = {storage for ... argument}:
+./11-memory_escape.go:14:22:     from ... argument (spill) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:22:     from fmt.Println(... argument...) (call parameter) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:14: "p1 :" escapes to heap:
+./11-memory_escape.go:14:14:   flow: {storage for ... argument} = &{storage for "p1 :"}:
+./11-memory_escape.go:14:14:     from "p1 :" (spill) at ./11-memory_escape.go:14:14
+./11-memory_escape.go:14:14:     from ... argument (slice-literal-element) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:14:   flow: {heap} = {storage for ... argument}:
+./11-memory_escape.go:14:14:     from ... argument (spill) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:14:     from fmt.Println(... argument...) (call parameter) at ./11-memory_escape.go:14:13
+./11-memory_escape.go:14:13: ... argument does not escape
+./11-memory_escape.go:14:14: "p1 :" escapes to heap
+./11-memory_escape.go:14:22: *p1 escapes to heap
+```
+
+可以看到p1逃逸到了heap也就是堆上，详情可以参考https://zhuanlan.zhihu.com/p/441593663
+
+## import
+
+以加减法计算器为例，新建以下目录结构
+
+![image-20221111060115102](images/image-20221111060115102.png)
+
+add.go
+
+```go
+package add
+
+func Add(a, b int) int {
+	return a + b
+}
+```
+
+sub.go
+
+```go
+package sub
+
+func Sub(a, b int) int {
+	return a - b
+}
+```
+
+我们在main.go中可以使用如下方法使用Add和Sub函数
+
+```go
+package main
+
+import (
+	"fmt"
+	"importTest/sub" // sub是文件名，也是包名
+)
+
+func main() {
+	res := sub.Sub(20, 7)
+	fmt.Println("sub.Sub(5,2) = ", res)
+}
+```
+
+这里我实际上遇到了问题，在导入sub包的时候，出现了相对路径无法使用的问题，经过排查发现go编译器在goroot中寻找了该包，自然是无法寻找到的，解决方案是关闭goland中的go module选项并关闭go mod，问题得到了解决
+
+若包名太长，可以给其定义一个别名
+
+```GO
+import (
+	"fmt"
+	SUB "importTest/sub"
+)
+
+func main() {
+	res := SUB.Sub(20, 7)
+	fmt.Println("sub.Sub(5,2) = ", res)
+}
+```
+
+也可以直接使用`.`来直接使用包下的函数，不需要使用包名，不建议使用，因为可能出现多个包有相同函数的情况
+
+```go
+import (
+	"fmt"
+	. "importTest/sub"
+)
+
+func main() {
+	res := Sub(20, 7)
+	fmt.Println("sub.Sub(5,2) = ", res)
+}
+```
+
+这里还有一个很重要的问题，便是**如果add.go中的函数如果不是`Add()`而是`add()`,是无法被调用的，因为在go中如果一个包中的函数想要被外部访问，首字母必须大写，类似于声明public**
+
+接下来我们还可以在sub目录下新建一个utils.go，在其中新建test函数
+
+![image-20221111065134176](images/image-20221111065134176.png)
+
+test.go
+
+```go
+package sub
+
+import "fmt"
+
+func test() {
+	fmt.Println("this is test() in sub/utils")
+}
+```
+
+由于utils.go和sub.go在同一个包名下，在sub中可以不import直接使用utils的test方法
+
+```go
+package sub
+
+func Sub(a, b int) int {
+	test()
+	return a - b
+}
+```
+
+并且可以发现在同一个包下，不需要首字母大写来声明public
+
+**同时需要注意，在go中，同级目录下只能有一个package name**，同时结合上述在同一包名下可以不用import，可以推导出在同一包名下，也可以说同一级目录下，不允许出现相同的函数名称
+
+# 补充语法
+
+## switch
+
+### 命令行交互
+
+在c语言中使用argc和**argv进行命令行参数的接收，在go中使用os.Args接收参数，是一个字符串切片
+
+```go
+func main() {
+	cmds := os.Args
+	for key, cmd := range cmds {
+		fmt.Println("key :", key, " cmd :", cmd)
+	}
+}
+```
+
+结果如下
+
+```go
+$ go run 12-switch.go 12 haha eee
+key : 0  cmd : /var/folders/j3/2vnn8qz93qj7snlvgdsrqd2m0000gn/T/go-build2748695938/b001/exe/12-switch
+key : 1  cmd : 12
+key : 2  cmd : haha
+key : 3  cmd : eee
+```
+
+接下来我们使用switch来判断输入的参数并进行相对应的操作
+
+```go
+func main() {
+	cmds := os.Args
+	switch cmds[1] {
+	case "help":
+		fmt.Println("help info")
+	case "test":
+		fmt.Println("test info")
+	default:
+		fmt.Println("default info")
+	}
+}
+```
+
+在go的switch中，不需要进行break，如果想像c语言一样实现向下运行，可以使用fallthrough
+
+```go
+func main() {
+	cmds := os.Args
+	switch cmds[1] {
+	case "help":
+		fmt.Println("help info")
+	case "test":
+		fmt.Println("test info")
+    fallthrough
+	default:
+		fmt.Println("default info")
+	}
+}
+```
 
