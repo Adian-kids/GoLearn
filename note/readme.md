@@ -839,3 +839,195 @@ func main() {
 }
 ```
 
+## 标签与continue-goto-break配合
+
+### goto
+
+在goto中，回到label1后i会从0重新开始
+
+```go
+func main() {
+	// goto LABEL_1
+	// break LABEL_2
+	// continue LABEL_3
+Label1:
+	for i := 0; i < 5; i++ {
+		for j := 0; j < 5; j++ {
+			if j == 3 {
+				goto Label1
+			}
+			fmt.Println("i = ", i, "j = ", j)
+		}
+	}
+}
+```
+
+结果如下
+
+```
+i =  0 j =  0
+i =  0 j =  1
+i =  0 j =  2
+i =  0 j =  0
+i =  0 j =  1
+i =  0 j =  2
+```
+
+### continue
+
+ continue 一个标签则可以继续使用上一次的值
+
+```go
+func main() {
+	// goto LABEL_1
+	// break LABEL_2
+	// continue LABEL_3
+Label1:
+	for i := 0; i < 5; i++ {
+		for j := 0; j < 5; j++ {
+			if j == 3 {
+				continue Label1
+			}
+			fmt.Println("i = ", i, "j = ", j)
+		}
+	}
+}
+```
+
+结果如下
+
+```
+i =  0 j =  0
+i =  0 j =  1
+i =  0 j =  2
+i =  1 j =  0
+i =  1 j =  1
+i =  1 j =  2
+i =  2 j =  0
+i =  2 j =  1
+i =  2 j =  2
+i =  3 j =  0
+i =  3 j =  1
+```
+
+### break
+
+break label可以直接跳出双层循环，如果单纯的break只能跳出内层循环，然后继续外层循环，和上面的continue label一样
+
+```go
+func main() {
+   // goto LABEL_1
+   // break LABEL_2
+   // continue LABEL_3
+Label1:
+   for i := 0; i < 5; i++ {
+      for j := 0; j < 5; j++ {
+         if j == 3 {
+            break Label1
+         }
+         fmt.Println("i = ", i, "j = ", j)
+      }
+   }
+}
+```
+
+结果：
+
+```
+i =  0 j =  0
+i =  0 j =  1
+i =  0 j =  2
+```
+
+## 枚举
+
+### iota
+
+go语言中没有枚举类型，但是我们可以使用`const` + `iota`（常量累加器进行模拟）const属于预编译期的赋值，因此不需要使用`:=`
+
+iota是常量组计数器，每换一行则会递增1，如果常量组不赋值，默认与上一行取同一值。
+
+如果同一行出现两个iota，iota的值不变
+
+代码如下
+
+```go
+package main
+
+import "fmt"
+
+// 定义常量,模拟一周的枚举
+const (
+	Monday = iota
+	Tuesday
+	Wednesday
+	Thursday
+	Friday
+	SateDay
+	Sunday
+)
+
+func main() {
+	fmt.Println(Monday)
+	fmt.Println(Tuesday)
+	fmt.Println(Wednesday)
+	fmt.Println(Thursday)
+	fmt.Println(Friday)
+	fmt.Println(SateDay)
+	fmt.Println(Sunday)
+
+}
+
+```
+
+可以看到输出结果如下
+
+```
+0
+1
+2
+3
+4
+5
+6
+```
+
+如果同一行出现两个iota
+
+```go
+const (
+	M,N = iota,iota
+)
+```
+
+则M,N的值相同
+
+不过每个iota是独立的，若再次遇到const，iota会重置为0
+
+## 结构体
+
+在go语言中，用结构体来模拟类,且有和c语言`typedef`功能相同的`type`
+
+```go
+type MyInt int
+```
+
+go语言的结构体使用type + struct来定义
+
+```go
+type People struct {
+	name string
+	age  int
+}
+```
+
+可按照如下方式使用
+
+```go
+func main() {
+	bob := People{age: 15, name: "bob"}
+	fmt.Println("his name :", bob.name, "\nhis age :", bob.age)
+}
+```
+
+哪怕使用内存地址，也不需要像C一样使用`->`，直接用`.`即可
